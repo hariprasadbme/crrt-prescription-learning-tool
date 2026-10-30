@@ -1,89 +1,63 @@
-# CRRT Calculation Learning Tool
+# CRRT Therapy Flow Dashboard
 
-A small Streamlit application for demonstrating basic, flow-based CRRT calculations.
+Version 2.0 is an educational Streamlit prototype for visualizing simplified flow-based calculations across CVVH, CVVHD, and CVVHDF.
 
-## Important safety notice
+## Safety statement
+**Not for clinical use.** This software is not a medical device, has not undergone clinical validation, and must not be used to prescribe, adjust, or monitor CRRT. It does not provide treatment recommendations. It is not a substitute for qualified clinical judgement, local protocols, device instructions, or measured clinical assessment. Do not enter patient identifiers or personal health information.
 
-This project is an educational prototype only. It is not a medical device and must not be used to prescribe, adjust, or monitor treatment. It does not provide clinical recommendations. Do not enter patient names, identifiers, or personal health information.
+Published formulas inform the implementation. This is not equivalent to independent clinical validation. Automated software tests check arithmetic and input handling only; passing tests does not establish clinical safety or validity.
 
-The app calculates:
+## Simplified modality formulas (mL/hr)
+- **CVVH:** pre-filter replacement + post-filter replacement + net patient fluid removal.
+- **CVVHD:** dialysate + net patient fluid removal.
+- **CVVHDF:** dialysate + pre-filter replacement + post-filter replacement + net patient fluid removal.
+- **Unadjusted effluent dose:** total effluent flow / entered weight (mL/kg/hr).
+- **Plasma water flow estimate:** blood flow (mL/min) × 60 × (1 − haematocrit fraction).
+- **Pre-dilution factor:** plasma water flow / (plasma water flow + pre-filter replacement flow).
+- **Pre-dilution adjusted estimate:** unadjusted dose × pre-dilution factor.
+- **Uptime-adjusted estimate:** unadjusted dose × uptime fraction.
 
-- Effluent flow = dialysate flow + replacement fluid flow + net patient fluid removal.
-- Unadjusted effluent dose = effluent flow / patient weight.
-- An illustrative time-averaged estimate using the uptime percentage entered by the user.
-
-The app does **not** apply a pre-dilution correction. If pre-dilution is selected, it displays a warning. It does not account for all clinical, device, modality, or treatment factors. A qualified clinical team must independently review any interpretation.
-
-## Requirements
-
-- Python 3.9 or newer
-- pip
+The pre-dilution adjusted value and uptime-adjusted value are separate illustrative estimates. The app does not combine them into a claimed delivered biological dose. It does not calculate filtration fraction.
 
 ## Run locally
-
-1. Download or clone this repository.
-2. Open a terminal in the project folder.
-3. Create a virtual environment:
-
-   Windows:
-   ```powershell
-   py -m venv .venv
-   .venv\Scripts\activate
-   ```
-
-   macOS/Linux:
-   ```bash
-   python3 -m venv .venv
-   source .venv/bin/activate
-   ```
-
-4. Install dependencies:
-
-   ```bash
-   pip install -r requirements.txt
-   ```
-
-5. Start the app:
-
-   ```bash
-   streamlit run app.py
-   ```
-
-6. Your browser should open the local app. If it does not, open the local address shown in the terminal.
-
-## Upload this project to GitHub using the website
-
-1. Sign in to GitHub.
-2. Open your profile and select **Repositories**.
-3. Select **New**.
-4. Repository name: `crrt-prescription-learning-tool`.
-5. Description: `Educational Streamlit prototype for basic CRRT flow calculations`.
-6. Select **Public** if you want the code to be open source.
-7. Select **Add a README file** only if you are creating a new empty repository and plan to upload the other files separately. If uploading this complete folder, it is simpler to leave it unchecked.
-8. Select **Create repository**.
-9. On the new repository page, select **Add file**, then **Upload files**.
-10. Upload `app.py`, `requirements.txt`, `README.md`, and `LICENSE`.
-11. Enter a commit message such as `Add initial educational CRRT calculator`.
-12. Select **Commit changes**.
-
-## Upload using Git commands
-
-After creating an empty repository on GitHub, open a terminal in this folder and run:
-
+Python 3.9 or newer:
 ```bash
-git init
-git add .
-git commit -m "Add initial educational CRRT calculator"
-git branch -M main
-git remote add origin https://github.com/YOUR-GITHUB-USERNAME/crrt-prescription-learning-tool.git
-git push -u origin main
+python -m venv .venv
+```
+Windows activation: `.venv\\Scripts\\activate`
+macOS/Linux activation: `source .venv/bin/activate`
+
+Install and run:
+```bash
+pip install -r requirements.txt
+streamlit run app.py
+```
+Run automated tests:
+```bash
+pytest -q
 ```
 
-Replace `YOUR-GITHUB-USERNAME` with your GitHub username. If Git asks you to sign in, complete GitHub's sign-in flow.
+## Upload updated files to GitHub
+1. Open `hariprasadbme/crrt-prescription-learning-tool`.
+2. Choose **Add file** → **Upload files**.
+3. Upload `app.py`, `crrt_calculations.py`, `requirements.txt`, `README.md`, and the `tests` folder with `test_crrt_calculations.py`.
+4. If folder upload is unavailable, use **Add file** → **Create new file** and name it `tests/test_crrt_calculations.py`, then paste the test file.
+5. Commit with message: `Upgrade dashboard with modality calculations and tests`.
+6. Streamlit Community Cloud should redeploy after the GitHub commit. Check app logs if deployment fails.
 
-## Suggested next steps
+## Limitations
+- No treatment recommendations, dose targets, modality selection, or fluid-removal recommendations.
+- The app does not determine whether actual, ideal, or adjusted body weight should be used. Follow local protocol.
+- The pre-dilution factor is simplified and does not account for every circuit configuration, pre-blood-pump fluids, access recirculation, sieving or saturation coefficients, or device-specific calculations.
+- No filtration fraction calculation is provided because conventions and required inputs can vary by circuit and device.
+- It does not model filter performance, clotting, adsorption, interruptions, measured effluent solute concentrations, or biological delivered clearance.
+- Uptime adjustment is a simple time-availability estimate, not measured clearance.
+- Qualified clinical review is essential. Do not enter protected or identifying data.
 
-- Add automated tests for the arithmetic.
-- Have the formula and assumptions reviewed by qualified CRRT clinicians.
-- Document the intended educational use and limitations clearly.
-- Invite feedback and contributions without presenting the project as clinically validated.
+## References
+1. Passi NN, Kirwan CJ. *JICS Education: Continuous renal replacement therapy* (2026). https://journals.sagepub.com/doi/10.1177/17511437261483952
+2. ISCCM Guidelines on Acute Kidney Injury and Renal Replacement Therapy (2022). https://pmc.ncbi.nlm.nih.gov/articles/PMC9989875/
+3. Villa G, et al. *Methods for dose quantification in continuous renal replacement therapy: Toward a more precise approach* (2021). https://onlinelibrary.wiley.com/doi/10.1111/aor.13991
+4. KDIGO AKI guideline (2012). https://kdigo.org/wp-content/uploads/2017/04/KDIGO-AKI-Guideline_Cass-2014.pdf
+
+References are for further review. Their inclusion does not constitute endorsement or clinical validation. Check current guidance and local protocols before interpreting any clinical parameter.

@@ -1,133 +1,85 @@
 import streamlit as st
 import pandas as pd
-from datetime import datetime
+from crrt_calculations import calculate_crrt
 
-st.set_page_config(page_title="CRRT Calculation Learning Tool", page_icon="🩺", layout="centered")
+st.set_page_config(page_title="CRRT Therapy Flow Dashboard", page_icon="🩺", layout="wide")
+st.title("CRRT Therapy Flow Dashboard")
+st.caption("Educational calculation and visualization prototype")
+st.error("EDUCATIONAL USE ONLY. This is not a medical device and has not been clinically validated. Do not use it to prescribe, adjust, or monitor CRRT. It provides no treatment recommendations. Outputs require independent review by qualified clinicians against local protocols and device instructions. Do not enter patient identifiers or personal health information.")
 
-st.title("CRRT Calculation Learning Tool")
-st.caption("Educational prototype for understanding basic CRRT flow calculations")
+with st.sidebar:
+    st.header("Calculation setup")
+    modality = st.selectbox("CRRT modality", ["CVVH", "CVVHD", "CVVHDF"])
+    weight = st.number_input("Weight used for dose normalization (kg)", 1.0, 400.0, 70.0, 0.5)
+    uptime = st.slider("Estimated machine uptime (%)", 0, 100, 95)
+    duration = st.number_input("Assessment period (hours)", 1, 24, 24)
+    st.divider()
+    st.subheader("Circuit flow inputs")
+    blood_flow = st.number_input("Blood flow (mL/min)", 0, 1000, 150, 10)
+    hct = st.number_input("Haematocrit (%)", 0.0, 80.0, 30.0, 0.5)
+    dialysate = st.number_input("Dialysate flow (mL/hr)", 0, 20000, 1000, 50) if modality in ("CVVHD", "CVVHDF") else 0
+    pre = st.number_input("Pre-filter replacement flow (mL/hr)", 0, 20000, 500, 50) if modality in ("CVVH", "CVVHDF") else 0
+    post = st.number_input("Post-filter replacement flow (mL/hr)", 0, 20000, 500, 50) if modality in ("CVVH", "CVVHDF") else 0
+    net_uf = st.number_input("Net patient fluid removal (mL/hr)", 0, 5000, 100, 10)
 
-st.warning(
-    "EDUCATIONAL USE ONLY. This tool is not a medical device and must not be used "
-    "to prescribe, adjust, or monitor treatment. It does not replace clinical "
-    "judgement, local protocols, device instructions, or review by a qualified "
-    "nephrology and critical care team. Do not enter patient names, identifiers, "
-    "or other personal health information."
-)
+try:
+    r = calculate_crrt(modality, weight, dialysate, pre, post, net_uf, blood_flow, hct, uptime, duration)
+except ValueError as e:
+    st.warning(str(e))
+    st.stop()
 
-st.subheader("1. Enter calculation inputs")
+st.subheader(f"{modality} calculation summary")
+st.caption("Flow-based estimates only. These values do not establish an appropriate prescription or confirm biological solute clearance.")
+a, b, c, d = st.columns(4)
+a.metric("Total effluent flow", f"{r['effluent_ml_hr']:,.0f} mL/hr")
+b.metric("Unadjusted effluent dose", f"{r['unadjusted_dose_ml_kg_hr']:.2f} mL/kg/hr")
+c.metric("Pre-dilution factor", f"{r['predilution_factor']:.3f}")
+d.metric("Uptime-adjusted estimate", f"{r['uptime_adjusted_dose_ml_kg_hr']:.2f} mL/kg/hr")
 
-col1, col2 = st.columns(2)
-with col1:
-    weight_kg = st.number_input(
-        "Patient weight (kg)", min_value=1.0, max_value=500.0,
-        value=70.0, step=0.5
-    )
-    dialysate_ml_hr = st.number_input(
-        "Dialysate flow (mL/hr)", min_value=0, max_value=20000,
-        value=1000, step=50
-    )
-with col2:
-    replacement_ml_hr = st.number_input(
-        "Replacement fluid flow (mL/hr)", min_value=0, max_value=20000,
-        value=1000, step=50
-    )
-    net_uf_ml_hr = st.number_input(
-        "Net patient fluid removal (mL/hr)", min_value=0, max_value=5000,
-        value=100, step=10
-    )
+left, right = st.columns([1.15, 1])
+with left:
+    st.subheader("Flow distribution")
+    chart = pd.DataFrame({"Flow (mL/hr)": [r["dialysate_ml_hr"], r["pre_replacement_ml_hr"], r["post_replacement_ml_hr"], r["net_uf_ml_hr"]]}, index=["Dialysate", "Pre-filter replacement", "Post-filter replacement", "Net patient fluid removal"])
+    st.bar_chart(chart, horizontal=True)
+with right:
+    st.subheader("Calculation details")
+    rows = [
+        ("Modality", modality), ("Weight used", f"{weight:.1f} kg"),
+        ("Total replacement flow", f"{r['replacement_total_ml_hr']:,.0f} mL/hr"),
+        ("Plasma water flow estimate", f"{r['plasma_water_flow_ml_hr']:,.0f} mL/hr"),
+        ("Pre-dilution correction applied", "Yes" if r["predilution_applied"] else "No"),
+        ("Estimated running time", f"{r['estimated_running_hours']:.1f} hours"),
+        ("Estimated effluent volume", f"{r['estimated_effluent_volume_ml']:,.0f} mL"),
+    ]
+    st.table(pd.DataFrame(rows, columns=["Parameter", "Value"]))
 
-st.subheader("2. Treatment time")
-uptime_pct = st.slider(
-    "Estimated machine uptime (%)", min_value=0, max_value=100, value=95,
-    help="For learning only. This estimates the effect of downtime on the time-averaged effluent rate."
-)
-hours = st.number_input(
-    "Elapsed period (hours)", min_value=1, max_value=24, value=24, step=1
-)
+if r["predilution_applied"]:
+    st.info("The pre-dilution adjusted value applies a simplified dilution factor. It is not a measured delivered dose and does not account for every circuit or modality factor.")
+else:
+    st.info("No pre-dilution correction was applied because pre-filter replacement flow is zero.")
 
-st.subheader("3. Calculation assumptions")
-predilution = st.checkbox(
-    "Some or all replacement fluid is delivered pre-filter",
-    value=False
-)
-if predilution:
-    st.info(
-        "This prototype does not apply a pre-dilution correction. The displayed "
-        "effluent dose is an unadjusted calculation and may overstate the "
-        "dose-equivalent clearance in pre-dilution settings."
-    )
+st.subheader("Export")
+st.download_button("Download calculation summary (CSV)", pd.DataFrame([r]).to_csv(index=False).encode(), "crrt_educational_calculation.csv", "text/csv")
 
-st.caption(
-    "Formula used: effluent flow = dialysate flow + replacement fluid flow "
-    "+ net patient fluid removal. Effluent dose = effluent flow ÷ weight."
-)
+with st.expander("Formula notes"):
+    st.markdown("""
+    - **CVVH:** pre-filter replacement + post-filter replacement + net patient fluid removal.
+    - **CVVHD:** dialysate + net patient fluid removal.
+    - **CVVHDF:** dialysate + pre-filter replacement + post-filter replacement + net patient fluid removal.
+    - **Unadjusted dose:** total effluent flow / entered weight.
+    - **Plasma water flow estimate:** blood flow × 60 × (1 − haematocrit fraction).
+    - **Pre-dilution factor:** plasma water flow / (plasma water flow + pre-filter replacement flow).
+    - **Uptime-adjusted estimate:** unadjusted dose × uptime fraction. This is not measured delivered clearance.
+    """)
 
-if st.button("Calculate", type="primary", use_container_width=True):
-    if weight_kg <= 0:
-        st.error("Weight must be greater than zero.")
-        st.stop()
-
-    effluent_flow = dialysate_ml_hr + replacement_ml_hr + net_uf_ml_hr
-    effluent_dose = effluent_flow / weight_kg
-    effective_hours = hours * (uptime_pct / 100)
-    period_effluent_ml = effluent_flow * effective_hours
-    time_averaged_dose = effluent_dose * (uptime_pct / 100)
-
-    st.subheader("Calculation results")
-    c1, c2 = st.columns(2)
-    c1.metric("Effluent flow", f"{effluent_flow:,.0f} mL/hr")
-    c2.metric("Unadjusted effluent dose", f"{effluent_dose:.2f} mL/kg/hr")
-    c3, c4 = st.columns(2)
-    c3.metric("Estimated time-averaged dose", f"{time_averaged_dose:.2f} mL/kg/hr")
-    c4.metric("Estimated effluent over period", f"{period_effluent_ml:,.0f} mL")
-
-    st.write(
-        f"At {uptime_pct}% uptime over {hours} hours, the estimated machine "
-        f"running time is {effective_hours:.1f} hours."
-    )
-
-    if predilution:
-        st.warning(
-            "Pre-dilution is selected. No correction has been applied, so do "
-            "not interpret the unadjusted dose as an adjusted delivered dose."
-        )
-
-    result = {
-        "calculation_timestamp": datetime.now().isoformat(timespec="seconds"),
-        "weight_kg": weight_kg,
-        "dialysate_flow_ml_hr": dialysate_ml_hr,
-        "replacement_flow_ml_hr": replacement_ml_hr,
-        "net_patient_fluid_removal_ml_hr": net_uf_ml_hr,
-        "machine_uptime_percent": uptime_pct,
-        "elapsed_period_hours": hours,
-        "pre_dilution_selected": predilution,
-        "effluent_flow_ml_hr": effluent_flow,
-        "unadjusted_effluent_dose_ml_kg_hr": round(effluent_dose, 3),
-        "estimated_time_averaged_dose_ml_kg_hr": round(time_averaged_dose, 3),
-        "estimated_effluent_over_period_ml": round(period_effluent_ml, 1),
-    }
-    csv = pd.DataFrame([result]).to_csv(index=False).encode("utf-8")
-    st.download_button(
-        "Download calculation summary (CSV)",
-        data=csv,
-        file_name="crrt_learning_calculation.csv",
-        mime="text/csv",
-        use_container_width=True
-    )
-
-st.divider()
-st.subheader("Important limitations")
-st.markdown(
-    """
-    - This is a learning demonstration, not a validated clinical calculator.
-    - It does not recommend a CRRT dose, fluid removal rate, modality, or treatment setting.
-    - It does not account for access recirculation, filter performance, clotting,
-      fluid composition, anticoagulation, interruptions beyond the uptime estimate,
-      or all modality-specific and dilution-related effects.
-    - The calculation is an unadjusted flow-based estimate. Clinical interpretation
-      requires qualified review and local protocol.
-    - Validate all calculations independently before any educational or research use.
-    """
-)
-st.caption("Open-source learning project. Use at your own risk; not for clinical care.")
+st.subheader("Clinical and technical limitations")
+st.markdown("""
+- No treatment recommendations, dose targets, modality selection, or fluid-removal recommendations.
+- The app does not determine whether actual, ideal, or adjusted body weight should be used. Follow local protocol.
+- The pre-dilution factor is simplified and does not account for every circuit configuration, pre-blood-pump fluids, access recirculation, sieving or saturation coefficients, or device-specific calculations.
+- No filtration fraction calculation is provided because conventions and required inputs can vary by circuit and device.
+- It does not model filter performance, clotting, adsorption, interruptions, measured effluent solute concentrations, or biological delivered clearance.
+- Uptime adjustment is a simple time-availability estimate, not measured clearance.
+- Qualified clinical review is essential. Do not enter protected or identifying data.
+""")
+st.caption("Version 2.0 | Educational open-source prototype | Not for clinical decision-making")
